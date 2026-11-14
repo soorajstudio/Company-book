@@ -48,8 +48,8 @@ class _CompanyScreenState extends State<CompanyScreen> {
       final member = await _companyService.getSoleMember();
 
       final now = DateTime.now();
-      final from = DateTime(now.year, now.month, 1);
-      final to = now;
+      final from = TransactionService.getCycleStartDate(now);
+      final to = TransactionService.getCycleEndDate(now);
 
       final allTxns = await _txnService.getTransactions(
         companyId: widget.companyId,
@@ -493,14 +493,14 @@ class _CompanyScreenState extends State<CompanyScreen> {
                             const Divider(height: 1, color: AppTheme.divider),
                             const SizedBox(height: 14),
 
-                            // Monthly member stats
+                            // Salary cycle member stats (18th - 17th)
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceAround,
                               children: [
                                 Column(
                                   children: [
                                     const Text(
-                                      'MONTH REVENUE',
+                                      'CYCLE REVENUE',
                                       style: TextStyle(
                                         fontSize: 10,
                                         fontWeight: FontWeight.w700,
@@ -528,7 +528,7 @@ class _CompanyScreenState extends State<CompanyScreen> {
                                 Column(
                                   children: [
                                     const Text(
-                                      'MONTH EXPENSES',
+                                      'CYCLE EXPENSES',
                                       style: TextStyle(
                                         fontSize: 10,
                                         fontWeight: FontWeight.w700,

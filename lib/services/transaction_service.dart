@@ -223,20 +223,42 @@ class TransactionService {
     return map;
   }
 
-  Future<List<Map<String, double>>> getMonthlySummary(
-      String companyId, int months) async {
+  /// Returns the start date (18th of the cycle) for any given reference date.
+  /// Salary is credited on the 18th, so the cycle runs from 18th to the next month's 17th.
+  static DateTime getCycleStartDate(DateTime date) {
+    if (date.day >= 18) {
+      return DateTime(date.year, date.month, 18);
+    } else {
+      return DateTime(date.year, date.month - 1, 18);
+    }
+  }
+
+  /// Returns the end date (17th of the next month) for a cycle starting on cycleStartDate.
+  static DateTime getCycleEndDate(DateTime cycleStartDate) {
+    return DateTime(cycleStartDate.year, cycleStartDate.month + 1, 17);
+  }
+
+  /// Calculates income and expense summary for the last [cyclesCount] salary cycles (18th to 17th).
+  Future<List<Map<String, dynamic>>> getMonthlySummary(
+      String companyId, int cyclesCount) async {
     final now = DateTime.now();
-    final List<Map<String, double>> list = [];
+    final currentCycleStart = getCycleStartDate(now);
+    final List<Map<String, dynamic>> list = [];
 
-    for (int i = months - 1; i >= 0; i--) {
-      final date = DateTime(now.year, now.month - i, 1);
-      final firstDay = DateTime(date.year, date.month, 1);
-      final lastDay = DateTime(date.year, date.month + 1, 0);
+    for (int i = cyclesCount - 1; i >= 0; i--) {
+      final start = DateTime(
+          currentCycleStart.year, currentCycleStart.month - i, 18);
+      final end = getCycleEndDate(start);
 
-      final inc = await getTotalIncome(companyId, firstDay, lastDay);
-      final exp = await getTotalExpense(companyId, firstDay, lastDay);
+      final inc = await getTotalIncome(companyId, start, end);
+      final exp = await getTotalExpense(companyId, start, end);
 
-      list.add({'income': inc, 'expense': exp});
+      list.add({
+        'income': inc,
+        'expense': exp,
+        'startDate': start,
+        'endDate': end,
+      });
     }
     return list;
   }

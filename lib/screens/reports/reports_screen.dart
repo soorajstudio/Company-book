@@ -24,9 +24,9 @@ class _ReportsScreenState extends State<ReportsScreen> {
   final _txnService = TransactionService();
   final _currency = NumberFormat.currency(locale: 'en_IN', symbol: '₹');
 
-  String _period = 'this_month';
-  DateTime _fromDate = DateTime(DateTime.now().year, DateTime.now().month, 1);
-  DateTime _toDate = DateTime.now();
+  String _period = 'this_cycle';
+  late DateTime _fromDate;
+  late DateTime _toDate;
   double _revenue = 0;
   double _expense = 0;
   Map<String, double> _catBreakdown = {};
@@ -37,19 +37,33 @@ class _ReportsScreenState extends State<ReportsScreen> {
   @override
   void initState() {
     super.initState();
+    final now = DateTime.now();
+    _fromDate = TransactionService.getCycleStartDate(now);
+    _toDate = TransactionService.getCycleEndDate(_fromDate);
     _load();
   }
 
   void _setPeriod(String p) {
     final now = DateTime.now();
+    final currentCycleStart = TransactionService.getCycleStartDate(now);
+    final currentCycleEnd =
+        TransactionService.getCycleEndDate(currentCycleStart);
+
     setState(() {
       _period = p;
-      if (p == 'this_month') {
-        _fromDate = DateTime(now.year, now.month, 1);
-        _toDate = now;
-      } else if (p == 'last_month') {
-        _fromDate = DateTime(now.year, now.month - 1, 1);
-        _toDate = DateTime(now.year, now.month, 0);
+      if (p == 'this_cycle') {
+        _fromDate = currentCycleStart;
+        _toDate = currentCycleEnd;
+      } else if (p == 'last_cycle') {
+        final lastStart = DateTime(
+            currentCycleStart.year, currentCycleStart.month - 1, 18);
+        _fromDate = lastStart;
+        _toDate = TransactionService.getCycleEndDate(lastStart);
+      } else if (p == 'last_3_cycles') {
+        final start3 = DateTime(
+            currentCycleStart.year, currentCycleStart.month - 2, 18);
+        _fromDate = start3;
+        _toDate = currentCycleEnd;
       } else if (p == 'ytd') {
         _fromDate = DateTime(now.year, 1, 1);
         _toDate = now;
@@ -180,9 +194,11 @@ class _ReportsScreenState extends State<ReportsScreen> {
                 scrollDirection: Axis.horizontal,
                 child: Row(
                   children: [
-                    _periodChip('this_month', 'This Month'),
+                    _periodChip('this_cycle', 'Current Cycle (18th-17th)'),
                     const SizedBox(width: 8),
-                    _periodChip('last_month', 'Last Month'),
+                    _periodChip('last_cycle', 'Last Cycle'),
+                    const SizedBox(width: 8),
+                    _periodChip('last_3_cycles', 'Last 3 Cycles'),
                     const SizedBox(width: 8),
                     _periodChip('ytd', 'Year to Date'),
                     const SizedBox(width: 8),

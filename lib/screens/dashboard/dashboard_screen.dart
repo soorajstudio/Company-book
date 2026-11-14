@@ -29,11 +29,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
   final _auth = AuthService();
   final _currency = NumberFormat.currency(locale: 'en_IN', symbol: '₹');
 
-  DateTime _selectedMonth = DateTime.now();
+  late DateTime _cycleStartDate;
+  DateTime get _cycleEndDate =>
+      TransactionService.getCycleEndDate(_cycleStartDate);
+
   double _income = 0;
   double _expense = 0;
   List<TransactionModel> _recent = [];
-  List<Map<String, double>> _monthlySummary = [];
+  List<Map<String, dynamic>> _monthlySummary = [];
   Map<String, double> _categoryBreakdown = {};
   bool _loading = true;
   String _greeting = 'Good day';
@@ -42,6 +45,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   @override
   void initState() {
     super.initState();
+    _cycleStartDate = TransactionService.getCycleStartDate(DateTime.now());
     _setGreeting();
     _loadData();
   }
@@ -65,9 +69,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
       final un = profile?['username'] as String?;
       _username = (fn != null && fn.isNotEmpty) ? fn : (un ?? 'Controller');
 
-      final firstDay = DateTime(_selectedMonth.year, _selectedMonth.month, 1);
-      final lastDay =
-          DateTime(_selectedMonth.year, _selectedMonth.month + 1, 0);
+      final firstDay = _cycleStartDate;
+      final lastDay = _cycleEndDate;
 
       final income = await _txnService.getTotalIncome(
           widget.companyId, firstDay, lastDay);
@@ -95,32 +98,33 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
   }
 
-  void _prevMonth() {
+  void _prevCycle() {
     setState(() {
-      _selectedMonth = DateTime(_selectedMonth.year, _selectedMonth.month - 1);
+      _cycleStartDate =
+          DateTime(_cycleStartDate.year, _cycleStartDate.month - 1, 18);
     });
     _loadData();
   }
 
-  void _nextMonth() {
-    final next = DateTime(_selectedMonth.year, _selectedMonth.month + 1);
-    if (next.isBefore(DateTime.now()) ||
-        (next.year == DateTime.now().year &&
-            next.month == DateTime.now().month)) {
-      setState(() => _selectedMonth = next);
+  void _nextCycle() {
+    final next =
+        DateTime(_cycleStartDate.year, _cycleStartDate.month + 1, 18);
+    final currentStart = TransactionService.getCycleStartDate(DateTime.now());
+    if (!next.isAfter(currentStart)) {
+      setState(() => _cycleStartDate = next);
       _loadData();
     }
   }
 
-  bool get _isCurrentMonth {
-    final now = DateTime.now();
-    return _selectedMonth.year == now.year && _selectedMonth.month == now.month;
+  bool get _isCurrentCycle {
+    final currentStart = TransactionService.getCycleStartDate(DateTime.now());
+    return _cycleStartDate.year == currentStart.year &&
+        _cycleStartDate.month == currentStart.month;
   }
 
   @override
   Widget build(BuildContext context) {
     final netProfit = _income - _expense;
-    final monthFormat = DateFormat('MMMM yyyy');
 
     return Scaffold(
       backgroundColor: AppTheme.background,
@@ -205,10 +209,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
                 const SizedBox(height: 18),
 
-                // Month Selector Bar
+                // Salary Cycle Selector Bar (18th to 17th)
                 Container(
                   padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                   decoration: BoxDecoration(
                     color: AppTheme.card,
                     borderRadius: BorderRadius.circular(14),
@@ -219,27 +223,40 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     children: [
                       IconButton(
                         icon: const Icon(Icons.chevron_left_rounded),
-                        onPressed: _prevMonth,
-                        tooltip: 'Previous Month',
+                        onPressed: _prevCycle,
+                        tooltip: 'Previous Cycle',
                         visualDensity: VisualDensity.compact,
                       ),
-                      Text(
-                        monthFormat.format(_selectedMonth),
-                        style: const TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w700,
-                          color: AppTheme.textPrimary,
-                        ),
+                      Column(
+                        children: [
+                          Text(
+                            '${DateFormat('dd MMM').format(_cycleStartDate)} – ${DateFormat('dd MMM yyyy').format(_cycleEndDate)}',
+                            style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w700,
+                              color: AppTheme.textPrimary,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          const Text(
+                            'Salary Cycle (18th – 17th)',
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w600,
+                              color: AppTheme.primary,
+                            ),
+                          ),
+                        ],
                       ),
                       IconButton(
                         icon: Icon(
                           Icons.chevron_right_rounded,
-                          color: _isCurrentMonth
+                          color: _isCurrentCycle
                               ? AppTheme.textMuted
                               : AppTheme.textPrimary,
                         ),
-                        onPressed: _isCurrentMonth ? null : _nextMonth,
-                        tooltip: 'Next Month',
+                        onPressed: _isCurrentCycle ? null : _nextCycle,
+                        tooltip: 'Next Cycle',
                         visualDensity: VisualDensity.compact,
                       ),
                     ],
@@ -486,7 +503,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     children: [
                       const Expanded(
                         child: Text(
-                          'Cashflow (Last 6 Months)',
+                          'Cashflow (Last 6 Salary Cycles)',
                           style: TextStyle(
                             fontSize: 15,
                             fontWeight: FontWeight.w700,
@@ -518,7 +535,27 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     child: BarChart(
                       BarChartData(
                         alignment: BarChartAlignment.spaceAround,
-                        barTouchData: BarTouchData(enabled: true),
+                        barTouchData: BarTouchData(
+                          enabled: true,
+                          touchTooltipData: BarTouchTooltipData(
+                            getTooltipItem: (group, groupIndex, rod, rodIndex) {
+                              final item = _monthlySummary[groupIndex];
+                              final end = item['endDate'] as DateTime?;
+                              final label = end != null
+                                  ? DateFormat('dd MMM').format(end)
+                                  : '';
+                              final isRev = rodIndex == 0;
+                              return BarTooltipItem(
+                                '$label\n${isRev ? "Rev" : "Exp"}: ${_currency.format(rod.toY)}',
+                                const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              );
+                            },
+                          ),
+                        ),
                         titlesData: FlTitlesData(
                           show: true,
                           topTitles: const AxisTitles(
@@ -532,18 +569,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               showTitles: true,
                               reservedSize: 22,
                               getTitlesWidget: (value, meta) {
-                                final now = DateTime.now();
                                 final idx = value.toInt();
                                 if (idx < 0 || idx >= _monthlySummary.length) {
                                   return const SizedBox.shrink();
                                 }
-                                final offset = _monthlySummary.length - 1 - idx;
-                                final d =
-                                    DateTime(now.year, now.month - offset, 1);
+                                final item = _monthlySummary[idx];
+                                final end = item['endDate'] as DateTime?;
+                                final label = end != null
+                                    ? DateFormat('MMM').format(end)
+                                    : '';
                                 return Padding(
                                   padding: const EdgeInsets.only(top: 4),
                                   child: Text(
-                                    DateFormat('MMM').format(d),
+                                    label,
                                     style: const TextStyle(
                                       fontSize: 11,
                                       fontWeight: FontWeight.w600,
@@ -558,8 +596,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         gridData: const FlGridData(show: false),
                         borderData: FlBorderData(show: false),
                         barGroups: _monthlySummary.asMap().entries.map((e) {
-                          final inc = e.value['income'] ?? 0.0;
-                          final exp = e.value['expense'] ?? 0.0;
+                          final inc =
+                              (e.value['income'] as num?)?.toDouble() ?? 0.0;
+                          final exp =
+                              (e.value['expense'] as num?)?.toDouble() ?? 0.0;
                           return BarChartGroupData(
                             x: e.key,
                             barRods: [
